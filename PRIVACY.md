@@ -14,6 +14,8 @@ The plugin requests read-only Calendar access. It does not create, edit, or dele
 
 Data is used to display your month calendar, agenda, upcoming-event countdowns, and meeting actions. Calendar metadata and events are cached on your device so the display remains available between syncs and when a request fails. Account tokens are stored in your desktop's Secret Service keyring. Tokens are sent to Google when authenticating or refreshing access.
 
+At event start, the plugin sends the event title, calendar name, account email, and meeting or event link to your local desktop notification service. Omarchy may retain these in notification history. A local record of hashed event identifiers and start times prevents duplicate alerts; older entries are pruned when subsequent alerts are processed. Removing an account from the plugin does not clear notifications already stored by the desktop.
+
 Your device communicates directly with Google. The maintainer does not operate a server that receives your calendar data or account tokens. The plugin contains no analytics or telemetry and does not sell personal information, use it for advertising, or use it to train AI models.
 
 Calendar & Agenda for Omarchy's use and transfer of information received from Google APIs adheres to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including its Limited Use requirements.

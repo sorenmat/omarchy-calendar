@@ -8,6 +8,40 @@ from omarchy_calendar_sync import google
 
 
 class GoogleTests(unittest.TestCase):
+    def test_start_notifications_are_clickable_and_persist_deduplication(self):
+        now = 1788861600000
+        alert = dict(key='shared-occurrence', start=now, title='Starting now: <Review>',
+                     body='Click to join meeting', url='https://meet.google.com/abc?authuser=work%40example.com')
+        with tempfile.TemporaryDirectory() as tmp, patch.object(google.time, 'time', return_value=now / 1000), patch.object(google.subprocess, 'run') as run:
+            folder = Path(tmp)
+            google.notify_start(folder, [alert, alert])
+            google.notify_start(folder, [alert])
+            run.assert_called_once()
+            command = run.call_args.args[0]
+            self.assertEqual(command[-3:], ['--exec', 'xdg-open', alert['url']])
+            self.assertIn('Starting now: &lt;Review&gt;', command)
+            saved = folder / 'alerts/notified.json'
+            self.assertNotIn('Review', saved.read_text())
+            self.assertEqual(saved.stat().st_mode & 0o777, 0o600)
+            google.notify_start(folder, [dict(alert, key='event', url='javascript:bad')])
+            self.assertEqual(run.call_args.args[0][-4:], ['--exec', 'omarchy-shell', google.APP, 'open'])
+            google.notify_start(folder, [dict(alert, key='old', start=now - 60000), dict(alert, key='future', start=now + 1)])
+            self.assertEqual(run.call_count, 2)
+
+    def test_failed_notification_can_retry_and_alert_lock_is_independent_of_sync(self):
+        alert = dict(key='event', start=100000, title='Starting now: Review', body='Click to open event', url='https://calendar.google.com/calendar/event?eid=sample')
+        with tempfile.TemporaryDirectory() as tmp, patch.object(google.time, 'time', return_value=100), patch.object(google.subprocess, 'run') as run:
+            folder = Path(tmp)
+            run.side_effect = google.subprocess.CalledProcessError(1, 'omarchy')
+            with self.assertRaises(google.CalendarError):
+                google.notify_start(folder, [alert])
+            run.side_effect = None
+            with google.locked(folder):
+                google.notify_start(folder, [alert])
+            self.assertEqual(run.call_count, 2)
+            with google.locked(folder / 'alerts'), self.assertRaises(google.CalendarError):
+                google.notify_start(folder, [alert])
+
     def test_shared_client_is_used_without_import_and_overrides_win(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)

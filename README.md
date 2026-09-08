@@ -50,6 +50,7 @@ Each account has an independent sync status and cache. Sync runs on shell startu
 - The meeting card follows a live meeting, then the next timed event. All-day and declined events never take over the card.
 - **Join meeting** opens its HTTPS video link; **Open event** opens Google's event page.
 - Google Meet and **Open event** links select the account that synced the event using its email (`authuser`), independent of the browser's account order. That account must also be signed in in the browser. Other providers keep their original links.
+- When a timed event starts, a desktop alert appears. Click it to join the meeting or open the event using the matching account. Alerts work while the popup is closed, respect Do Not Disturb, and skip hidden calendars, declined invitations, all-day events, and out-of-office blocks. Shared events alert once across monitors and shell restarts. Events that started less than a minute ago can still alert after a late sync or wake; older events do not.
 - Arrow keys select days; `[` / `]` change month; `t` returns to today; `r` refreshes; `s` opens settings; `m` joins the featured meeting. Tab moves between controls; Escape backs out or closes.
 - Right-click the bar clock to cycle its date format.
 

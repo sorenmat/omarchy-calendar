@@ -503,3 +503,30 @@ test('calendar selection includes empty calendars from explicit inventory', () =
   const calendars=[{id:'empty',name:'Empty',color:'#ffffff'}]
   assert.deepEqual(Model.calendarsInDocument({calendars,events:[]}),calendars)
 })
+
+test('start alerts respect start time, visibility, recurrence, and account routing', () => {
+  const now = Date.parse('2026-09-08T10:00:00Z')
+  const event = {id:'a', iCalUID:'shared', calendarId:'work', title:'Review', accountEmail:'work@example.com',
+    start:'2026-09-08T10:00:00Z', end:'2026-09-08T10:30:00Z', dateKey:'2026-09-08',
+    meetingUrl:'https://meet.google.com/abc', eventUrl:'https://www.google.com/calendar/event?eid=sample'}
+  const [alert] = Model.startAlerts([event], now, {})
+  assert.equal(alert.url, 'https://meet.google.com/abc?authuser=work%40example.com')
+  assert.equal(Model.startAlerts([event], now - 1, {}).length, 0)
+  assert.equal(Model.startAlerts([event], now + 59999, {}).length, 1)
+  assert.equal(Model.startAlerts([event], now + 60000, {}).length, 0)
+  assert.equal(Model.startAlerts([event], now, {[alert.key]: now}).length, 0)
+  const duplicate = {...event, id:'b', calendarId:'personal', dateKey:'2026-09-09'}
+  assert.equal(Model.startAlerts([event, duplicate], now, {}).length, 1)
+  assert.equal(Model.startAlerts(Model.mergedEvents([event], ['work']), now, {}).length, 0)
+  for (const extra of [{allDay:true}, {responseStatus:'declined'}, {eventType:'workingLocation'},
+    {eventType:'outOfOffice'}, {status:'cancelled'}, {start:'invalid'}, {end:'2026-09-08T10:00:01Z'}]) {
+    assert.equal(Model.startAlerts([{...event, ...extra}], now + 1000, {}).length, 0)
+  }
+  const next = {...event, start:'2026-09-09T10:00:00Z', end:'2026-09-09T10:30:00Z'}
+  assert.equal(Model.startAlerts([next], now + 86400000, {[alert.key]: now}).length, 1)
+  assert.equal(Model.startAlerts([{...event, iCalUID:'other'}, event], now, {}).length, 2)
+  const [calendar] = Model.startAlerts([{...event, meetingUrl:''}], now, {})
+  assert.equal(calendar.url, 'https://calendar.google.com/calendar/event?eid=sample&authuser=work%40example.com')
+  const [noLink] = Model.startAlerts([{...event, meetingUrl:'javascript:bad', eventUrl:''}], now, {})
+  assert.equal(noLink.url, '')
+})

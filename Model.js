@@ -414,6 +414,26 @@ function eventUrlFor(event) {
   return event ? googleAccountUrl(event.eventUrl, event.accountEmail) : ""
 }
 
+// A short catch-up window handles a late sync or wake without replaying old events.
+function startAlerts(events, nowMs, notified) {
+  var alerts = [], seen = {}
+  ;(events || []).forEach(function(event) {
+    var start = Date.parse(event.start), end = Date.parse(event.end)
+    if (event.allDay || isDeclined(event) || isNoisyEventType(event) || isOutOfOffice(event)
+        || event.status === "cancelled" || !isFinite(start) || nowMs < start || nowMs - start >= 60000
+        || (isFinite(end) && end > start && end <= nowMs)) return
+    var key = JSON.stringify([event.iCalUID || [event.accountId, event.calendarId, event.id], start])
+    if (seen[key] || (notified && notified[key])) return
+    seen[key] = true
+    var meeting = meetingUrlFor(event), url = meeting || eventUrlFor(event)
+    alerts.push({key: key, start: start, title: "Starting now: " + (event.title || "Untitled event"),
+      body: (meeting ? "Click to join meeting" : url ? "Click to open event" : "Click to open calendar")
+        + (event.calendarName ? " · " + event.calendarName : "")
+        + (event.accountEmail ? " · " + event.accountEmail : ""), url: url})
+  })
+  return alerts
+}
+
 // How long before the start, and after the end, a meeting still counts as
 // joinable. A Join button on next Tuesday's meeting is noise that dilutes the
 // one that matters, so the affordance only appears around the actual time.
@@ -673,6 +693,7 @@ if (typeof module !== "undefined") {
     commandPathFromUrl: commandPathFromUrl,
     meetingUrlFor: meetingUrlFor,
     eventUrlFor: eventUrlFor,
+    startAlerts: startAlerts,
     isJoinableNow: isJoinableNow,
     eventsForDateKey: eventsForDateKey,
     eventColors: eventColors,

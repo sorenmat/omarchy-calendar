@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import fcntl
 import hashlib
+import html
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
@@ -19,7 +20,7 @@ from urllib.parse import parse_qs, quote, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from .cli import resolve_local_timezone, write_atomic
-from .normalize import normalize_all
+from .normalize import normalize_all, _https_only
 
 SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
           'https://www.googleapis.com/auth/calendar.events.readonly']
@@ -274,6 +275,31 @@ def remove(folder, account_id):
         write_atomic(folder / 'events.json', doc)
 
 
+def notify_start(folder, alerts):
+    """One notification per occurrence, shared by all monitors and shell restarts."""
+    folder = folder / 'alerts'
+    with locked(folder):
+        path = folder / 'notified.json'
+        sent = json.loads(path.read_text()) if path.exists() else {}
+        now = time.time() * 1000
+        sent = {key: start for key, start in sent.items() if now - start < 86400000}
+        for alert in alerts:
+            key = hashlib.sha256(alert['key'].encode()).hexdigest()
+            if key in sent or not 0 <= now - alert['start'] < 60000:
+                continue
+            url = _https_only(alert['url'])
+            action = ['xdg-open', url] if url else ['omarchy-shell', APP, 'open']
+            command = ['omarchy', 'notification', 'send', '--app-name', APP,
+                       '-u', 'normal', '-g', '󰃭', '-t', '60000',
+                       html.escape(alert['title']), html.escape(alert['body']), '--exec', *action]
+            try:
+                subprocess.run(command, check=True, capture_output=True, timeout=10)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                raise CalendarError('Could not show the event notification.') from None
+            sent[key] = alert['start']
+            write_atomic(path, sent)
+
+
 def main(argv=None):
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
@@ -281,12 +307,16 @@ def main(argv=None):
     commands = parser.add_subparsers(dest='command', required=True)
     commands.add_parser('sync')
     commands.add_parser('status')
+    commands.add_parser('notify').add_argument('alerts', help='JSON start alerts from the widget')
     add = commands.add_parser('connect')
     add.add_argument('--client', help='Google Desktop app credentials JSON')
     add.add_argument('--account', help='Reconnect an existing account')
     commands.add_parser('remove').add_argument('account')
     args = parser.parse_args(argv)
     try:
+        if args.command == 'notify':
+            notify_start(args.state_dir, json.loads(args.alerts))
+            return 0
         if args.command == 'connect':
             connect(args.state_dir, args.client, args.account)
         elif args.command == 'sync':

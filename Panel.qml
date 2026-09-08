@@ -82,6 +82,12 @@ Panel {
   Timer { interval: 1500; running: true; onTriggered: if (root.eventDoc && root.eventDoc.accounts.length) root.run(["sync"]) }
   SystemClock { precision: SystemClock.Minutes; onDateChanged: root.now = date }
 
+  EventAlerts {
+    events: root.visibleEventList
+    helper: root.helper
+    stateDir: root.stateDir
+  }
+
   KeyboardPanel {
     id: panel
     anchorItem: root.anchorItem; owner: root.barIdentity; bar: root.bar
