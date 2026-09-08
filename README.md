@@ -49,6 +49,7 @@ Each account has an independent sync status and cache. Sync runs on shell startu
 - **Next 7 days** shows the upcoming agenda, grouped by day.
 - The meeting card follows a live meeting, then the next timed event. All-day and declined events never take over the card.
 - **Join meeting** opens its HTTPS video link; **Open event** opens Google's event page.
+- Google Meet and **Open event** links select the account that synced the event using its email (`authuser`), independent of the browser's account order. That account must also be signed in in the browser. Other providers keep their original links.
 - Arrow keys select days; `[` / `]` change month; `t` returns to today; `r` refreshes; `s` opens settings; `m` joins the featured meeting. Tab moves between controls; Escape backs out or closes.
 - Right-click the bar clock to cycle its date format.
 

@@ -340,6 +340,33 @@ test('meetingUrlFor is empty rather than undefined when absent', () => {
   assert.equal(Model.meetingUrlFor({ meetingUrl: 'https://z.com/1' }), 'https://z.com/1')
 })
 
+test('Meet joins use the source account email and replace existing account hints', () => {
+  const meetingUrl = 'https://meet.google.com/abc-defg-hij'
+  for (const accountEmail of ['personal@example.com', 'work+calendar@example.com']) {
+    const event = { meetingUrl, accountEmail, organizer: { email: 'host@example.com' } }
+    const expected = meetingUrl + '?authuser=' + encodeURIComponent(accountEmail)
+    assert.equal(Model.meetingUrlFor(event), expected)
+    assert.equal(Model.meetingUrlFor({ ...event,
+      meetingUrl: meetingUrl + '?authuser=0&hs=122&%61uthuser=1#details'
+    }), meetingUrl + '?hs=122&authuser=' + encodeURIComponent(accountEmail) + '#details')
+    assert.equal(Model.meetingUrlFor({ ...event, meetingUrl: expected }), expected)
+  }
+  assert.equal(Model.meetingUrlFor({ meetingUrl: meetingUrl + '?authuser=1' }), meetingUrl + '?authuser=1')
+})
+
+test('Meet account hints never leak into other meeting providers or lookalike hosts', () => {
+  for (const meetingUrl of [
+    'https://zoom.us/j/123?pwd=abc#join',
+    'https://teams.microsoft.com/l/meetup-join/123',
+    'https://meet.google.com.evil.example/abc',
+    'https://meet.google.com@evil.example/abc',
+    'https://meet.google.com:8443/abc'
+  ]) {
+    assert.equal(Model.meetingUrlFor({ meetingUrl, accountEmail: 'work@example.com' }), meetingUrl)
+  }
+  assert.equal(Model.meetingUrlFor({ meetingUrl: 'javascript:alert(1)', accountEmail: 'work@example.com' }), '')
+})
+
 const meeting = (start, end, extra = {}) => ({
   id: 's', title: 'Standup', allDay: false, dateKey: '2026-08-10',
   start, end, meetingUrl: 'https://meet.google.com/x', ...extra
@@ -396,6 +423,31 @@ test('eventUrlFor mirrors meetingUrlFor and is https only', () => {
   assert.equal(Model.eventUrlFor({ eventUrl: 'http://calendar.google.com/e' }), '')
   assert.equal(Model.eventUrlFor({}), '')
   assert.equal(Model.eventUrlFor(null), '')
+})
+
+test('Open event selects the source account for API links and browser links', () => {
+  for (const accountEmail of ['personal@example.com', 'work+calendar@example.com']) {
+    for (const eventUrl of [
+      'https://www.google.com/calendar/event?eid=example%2B123&ctz=Europe%2FCopenhagen',
+      'https://calendar.google.com/calendar/event?eid=example%2B123&ctz=Europe%2FCopenhagen&authuser=0',
+      'https://calendar.google.com/calendar/u/1/event?eid=example%2B123&ctz=Europe%2FCopenhagen&authuser=other%40example.com'
+    ]) {
+      const event = { eventUrl: eventUrl + '#details', accountEmail }
+      const expected = 'https://calendar.google.com/calendar/event?eid=example%2B123&ctz=Europe%2FCopenhagen&authuser=' + encodeURIComponent(accountEmail) + '#details'
+      assert.equal(Model.eventUrlFor(event), expected)
+      assert.equal(Model.eventUrlFor({ ...event, eventUrl: expected }), expected)
+    }
+  }
+  for (const eventUrl of [
+    'https://www.google.com/calendar/event?eid=example',
+    'https://calendar.google.com/calendar/u/1/r/eventedit/example?authuser=1'
+  ]) assert.equal(Model.eventUrlFor({ eventUrl }), eventUrl)
+  for (const eventUrl of [
+    'https://calendar.google.com.evil.example/calendar/event?eid=example',
+    'https://www.google.com/calendar-other',
+    'https://www.google.com/url?url=https://example.com',
+    'https://outlook.office.com/calendar/item/example'
+  ]) assert.equal(Model.eventUrlFor({ eventUrl, accountEmail: 'work@example.com' }), eventUrl)
 })
 
 test('commandPathFromUrl strips the file scheme and shortens home', () => {

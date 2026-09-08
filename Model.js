@@ -380,14 +380,38 @@ function commandPathFromUrl(fileUrl, home) {
   return text
 }
 
+function googleAccountUrl(url, accountEmail) {
+  url = safeUrl(url)
+  var email = String(accountEmail || "").trim()
+  // Use the account that synced this event, not the invitation's organizer.
+  // Browser account indexes change; select by email for both Meet and Calendar.
+  // Only send the account email to these exact Google hosts and paths.
+  if (!email || !/^https:\/\/(?:(?:meet|calendar)\.google\.com(?::443)?(?:[/?#]|$)|www\.google\.com(?::443)?\/calendar(?:[/?#]|$))/i.test(url) || /\\/.test(url)) return url
+  url = url.replace(/^https:\/\/www\.google\.com(?::443)?\/calendar(?=[/?#]|$)/i, "https://calendar.google.com/calendar")
+  url = url.replace(/^(https:\/\/calendar\.google\.com(?::443)?\/calendar)\/u\/\d+(?=[/?#]|$)/i, "$1")
+  var hashAt = url.indexOf("#")
+  var fragment = hashAt < 0 ? "" : url.substring(hashAt)
+  var base = hashAt < 0 ? url : url.substring(0, hashAt)
+  var queryAt = base.indexOf("?")
+  var params = queryAt < 0 ? [] : base.substring(queryAt + 1).split("&")
+  if (queryAt >= 0) base = base.substring(0, queryAt)
+  params = params.filter(function(param) {
+    if (!param) return false
+    try { return decodeURIComponent(param.split("=")[0]) !== "authuser" }
+    catch (error) { return true }
+  })
+  params.push("authuser=" + encodeURIComponent(email))
+  return base + "?" + params.join("&") + fragment
+}
+
 function meetingUrlFor(event) {
-  return event ? safeUrl(event.meetingUrl) : ""
+  return event ? googleAccountUrl(event.meetingUrl, event.accountEmail) : ""
 }
 
 // The event's own page, used when there is nothing to join. Older files and
 // third-party writers have no such field, which is why this is never assumed.
 function eventUrlFor(event) {
-  return event ? safeUrl(event.eventUrl) : ""
+  return event ? googleAccountUrl(event.eventUrl, event.accountEmail) : ""
 }
 
 // How long before the start, and after the end, a meeting still counts as
