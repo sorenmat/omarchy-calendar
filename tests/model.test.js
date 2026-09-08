@@ -425,3 +425,29 @@ test('commandPathFromUrl does not shorten a home-lookalike prefix', () => {
     '/home/tmn2/plugin/sync/setup'
   )
 })
+
+test('merged events deduplicate after calendar visibility and prefer accepted copies', () => {
+  const event = {id:'a', calendarId:'a', title:'Review', dateKey:'2026-09-08', start:'2026-09-08T10:00:00Z', end:'2026-09-08T11:00:00Z', iCalUID:'shared'}
+  const other = {...event, calendarId:'b', responseStatus:'accepted'}
+  const declined = {...event, responseStatus:'declined'}
+  assert.deepEqual(Model.mergedEvents([declined, other], [], {}), [other])
+  assert.deepEqual(Model.mergedEvents([event, other], ['a'], {}), [other])
+})
+test('featured event keeps live meeting and ignores all-day and declined events', () => {
+  const now=Date.parse('2026-09-08T10:30:00Z')
+  const live={title:'Now',start:'2026-09-08T10:00:00Z',end:'2026-09-08T11:00:00Z'}
+  const next={title:'Next',start:'2026-09-08T12:00:00Z',end:'2026-09-08T13:00:00Z'}
+  assert.equal(Model.featuredEvent([next,live],now),live)
+  assert.equal(Model.featuredEvent([{...live,responseStatus:'declined'},next],now),next)
+  assert.equal(Model.featuredEvent([{...live,allDay:true}],now),null)
+})
+test('agenda retains past events for selected day but hides ended meetings in upcoming view', () => {
+  const now=new Date(2026,8,8,14).getTime()
+  const ended={dateKey:'2026-09-08',end:new Date(2026,8,8,13).toISOString()}
+  assert.equal(Model.agendaGroups([ended],'2026-09-08',1,now)[0].items.length,1)
+  assert.equal(Model.agendaGroups([ended],'2026-09-08',7,now).length,0)
+})
+test('calendar selection includes empty calendars from explicit inventory', () => {
+  const calendars=[{id:'empty',name:'Empty',color:'#ffffff'}]
+  assert.deepEqual(Model.calendarsInDocument({calendars,events:[]}),calendars)
+})

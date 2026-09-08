@@ -6,3 +6,11 @@ node_modules/
 # Design notes and plans stay local, see ~/dev/omarchy-calendar-notes
 docs/design/
 docs/plans/
+
+# Never commit OAuth credentials or local calendar state.
+client_secret*.json
+credentials*.json
+events.json
+
+# Publisher registration stays local until the public OAuth release.
+oauth-client.json

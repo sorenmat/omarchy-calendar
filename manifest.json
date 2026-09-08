@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "id": "tmn73.calendar",
-  "name": "Calendar",
-  "version": "0.2.1",
-  "author": "tmn73",
+  "id": "smo.calendar",
+  "name": "Calendar & Agenda",
+  "version": "0.1.0",
+  "author": "smo, tmn73, tobiasz-p",
   "license": "MIT",
-  "description": "Your Google Calendar in the bar. Your next meeting at a glance, and one click to join it.",
+  "description": "A month calendar and meeting agenda for multiple Google accounts.",
   "kinds": [
     "bar-widget"
   ],
@@ -13,7 +13,7 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "Calendar",
+    "displayName": "Calendar & Agenda",
     "description": "Your Google Calendar in the bar. Your next meeting at a glance, and one click to join it.",
     "category": "Time",
     "allowMultiple": false,
@@ -40,18 +40,6 @@
         "type": "string",
         "label": "Vertical bar format",
         "defaultValue": "HH\n-\nmm"
-      },
-      {
-        "key": "birthYear",
-        "type": "number",
-        "label": "Birth year",
-        "defaultValue": 0
-      },
-      {
-        "key": "lifeExpectancy",
-        "type": "number",
-        "label": "Life expectancy",
-        "defaultValue": 0
       }
     ]
   }

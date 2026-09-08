@@ -12,7 +12,7 @@ import "Model.js" as Model
 // middle click opens the timezone picker.
 BarWidget {
   id: root
-  moduleName: "tmn73.calendar"
+  moduleName: "smo.calendar"
 
   property date displayDate: clock.date
 
@@ -40,12 +40,12 @@ BarWidget {
   readonly property real nowMs: displayDate.getTime()
 
   readonly property int announceLeadMinutes: setting("announceLeadMinutes", 15)
-  readonly property var upcomingEvent: Model.nextEvent(visibleEventList, nowMs)
+  readonly property var upcomingEvent: Model.featuredEvent(visibleEventList, nowMs)
   readonly property bool announcing: announceLeadMinutes > 0
-    && Model.shouldAnnounce(upcomingEvent, nowMs, announceLeadMinutes)
+    && (Model.shouldAnnounce(upcomingEvent, nowMs, announceLeadMinutes) || (upcomingEvent && Date.parse(upcomingEvent.start) <= nowMs && Date.parse(upcomingEvent.end) > nowMs))
 
   readonly property string countdownPhrase: announcing
-    ? (Model.formatCountdown(Model.millisUntil(upcomingEvent, nowMs)) || "")
+    ? (Date.parse(upcomingEvent.start) <= nowMs ? "now" : Model.formatCountdown(Model.millisUntil(upcomingEvent, nowMs)) || "")
     : ""
 
   // The clock stays. This widget replaces the desktop's clock, so trading the
@@ -154,12 +154,13 @@ BarWidget {
   }
 
   IpcHandler {
-    target: "tmn73.calendar"
+    target: "smo.calendar"
 
     function refresh(): void { root.broadcast("refresh") }
     function cycleFormat(): void { root.cycleFormat() }
     function toggleWeekStart(): void { root.toggleWeekStart() }
     function open(): void { root.open() }
+    function accounts(): void { root.open(); if (panelLoader.item) panelLoader.item.settingsOpen = true }
     function close(): void { root.close() }
     function show(): void { root.open() }
     function hide(): void { root.close() }

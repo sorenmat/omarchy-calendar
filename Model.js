@@ -297,6 +297,7 @@ function eventsForDateKey(index, dateKey) {
 // the widget needs no separate calendar list and no configuration file: it
 // can only ever offer you calendars you actually have events in.
 function calendarsInDocument(doc) {
+  if (doc && Array.isArray(doc.calendars)) return doc.calendars.slice()
   var events = (doc && doc.events) || []
   var byId = {}
   var ordered = []
@@ -432,6 +433,43 @@ function visibleEvents(events, hidden, options) {
   return visible
 }
 
+// Filter before deduplication so hiding one copy never hides a shared event.
+function mergedEvents(events, hidden, options) {
+  var seen = {}, result = []
+  var visible = visibleEvents(events, hidden, options)
+  visible.sort(function(a, b) { return Number(isDeclined(a)) - Number(isDeclined(b)) })
+  visible.forEach(function(event) {
+    var key = event.iCalUID ? JSON.stringify([event.iCalUID, Date.parse(event.start), event.dateKey]) : ""
+    if (key && seen[key]) return
+    if (key) seen[key] = true
+    result.push(event)
+  })
+  return result.sort(function(a, b) {
+    return a.dateKey.localeCompare(b.dateKey) || Number(b.allDay) - Number(a.allDay)
+      || Date.parse(a.start) - Date.parse(b.start) || a.title.localeCompare(b.title)
+  })
+}
+
+function featuredEvent(events, nowMs) {
+  var live = (events || []).filter(function(e) {
+    return !e.allDay && !isDeclined(e) && Date.parse(e.start) <= nowMs && Date.parse(e.end) > nowMs
+  }).sort(function(a, b) { return Date.parse(a.end) - Date.parse(b.end) })
+  return live[0] || nextEvent((events || []).filter(function(e) { return !isDeclined(e) }), nowMs)
+}
+
+function agendaGroups(events, startKey, count, nowMs) {
+  var cursor = dateFromKey(startKey, new Date(nowMs)), result = []
+  for (var i = 0; i < count; i++) {
+    var key = keyForDate(cursor)
+    var items = (events || []).filter(function(e) {
+      return e.dateKey === key && (count === 1 || e.allDay || Date.parse(e.end) > nowMs)
+    })
+    if (items.length || count === 1) result.push({key: key, items: items})
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return result
+}
+
 // ---- The next thing coming up.
 
 var MINUTE_MS = 60 * 1000
@@ -565,6 +603,9 @@ function syncState(doc, nowMs, intervalSeconds) {
 
 if (typeof module !== "undefined") {
   module.exports = {
+    mergedEvents: mergedEvents,
+    featuredEvent: featuredEvent,
+    agendaGroups: agendaGroups,
     dateKey: dateKey,
     keyForDate: keyForDate,
     normalizedWeekStart: normalizedWeekStart,

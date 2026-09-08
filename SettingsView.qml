@@ -1,278 +1,115 @@
 import QtQuick
+import QtQuick.Layouts
+import QtQuick.Dialogs
 import qs.Commons
 import qs.Ui
+import "Model.js" as Model
 
-// The calendar's settings page, shown in place of the month grid.
-//
-// Kept in its own file rather than folded into Panel.qml: the panel is
-// already long, and everything here is presentation over values the panel
-// owns. This component reads state and emits intent, it never writes
-// shell.json itself.
 Column {
   id: root
-
-  property color foreground: "white"
-  property string fontFamily: ""
-
-  property var calendars: []
+  property var document: null
   property var hiddenCalendars: []
-  property bool showYearProgress: false
+  property bool busy: false
   property bool weekStartsMonday: true
-  property bool showWorkingLocation: false
   property bool hideDeclined: false
-  property int announceLeadMinutes: 15
-
-  property string syncedAt: ""
-  property string sourceLabel: ""
-  property int eventCount: 0
-  property string syncState: "missing"
-  property string setupCommand: ""
-  property bool setupCommandCopied: false
-
-  signal calendarToggled(string calendarId)
-  signal yearProgressToggled()
+  property string message: ""
+  property string removing: ""
+  property bool advancedOpen: false
+  signal connectRequested(string path, string account)
+  signal removeRequested(string account)
+  signal calendarToggled(string id)
   signal weekStartToggled()
-  signal workingLocationToggled()
-  signal hideDeclinedToggled()
-  signal leadMinutesPicked(int minutes)
-  signal setupCommandCopyRequested()
-
-  readonly property color muted: Qt.darker(foreground, 1.5)
-  readonly property color faint: Qt.darker(foreground, 1.9)
-
-  spacing: Style.space(10)
-
-  component SectionTitle: Text {
-    color: root.faint
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
-    font.letterSpacing: 1
-    font.bold: true
+  signal declinedToggled()
+  spacing: Style.space(12)
+  component Label: Text {
+    textFormat: Text.PlainText; color: Color.foreground
+    font.family: Style.font.family; font.pixelSize: Style.font.bodySmall
   }
-
-  // A row that reads as a switch without pulling in a control library the
-  // rest of this plugin does not use.
-  component ToggleRow: Rectangle {
-    id: toggle
-
-    property string label: ""
-    property string hint: ""
-    property bool checked: false
-    property color swatch: "transparent"
-
-    signal activated()
-
-    width: parent ? parent.width : 0
-    height: toggleBody.height + Style.space(6)
-    radius: Style.cornerRadius
-    color: hovered.hovered
-      ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.06)
-      : "transparent"
-
-    HoverHandler { id: hovered }
-    TapHandler { onTapped: toggle.activated() }
-
-    Row {
-      id: toggleBody
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.leftMargin: Style.space(3)
-      anchors.rightMargin: Style.space(3)
-      anchors.verticalCenter: parent.verticalCenter
-      spacing: Style.space(4)
-
-      Text {
-        anchors.verticalCenter: parent.verticalCenter
-        width: Style.space(14)
-        text: toggle.checked ? "✓" : ""
-        color: root.foreground
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.bodySmall
-      }
-
-      Rectangle {
-        anchors.verticalCenter: parent.verticalCenter
-        visible: toggle.swatch != "transparent"
-        width: Style.space(4)
-        height: width
-        radius: width / 2
-        color: toggle.checked ? toggle.swatch : "transparent"
-        border.width: Style.spacing.hairline
-        border.color: toggle.swatch
-      }
-
-      Column {
-        anchors.verticalCenter: parent.verticalCenter
-        width: toggleBody.width - Style.space(26)
-        spacing: Style.space(1)
-
-        Text {
-          width: parent.width
-          text: toggle.label
-          color: toggle.checked ? root.foreground : root.muted
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          elide: Text.ElideRight
-        }
-
-        Text {
-          width: parent.width
-          visible: toggle.hint !== ""
-          text: toggle.hint
-          color: root.faint
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          elide: Text.ElideRight
-        }
-      }
-    }
+  component Action: Button { focusable: true; fontSize: Style.font.bodySmall }
+  Label { text: qsTr("GOOGLE ACCOUNTS"); font.bold: true; font.letterSpacing: 1; opacity: 0.6 }
+  Label {
+    width: parent.width; wrapMode: Text.WordWrap; opacity: 0.7
+    text: qsTr("Connect each Google account once, then choose the calendars to show. Access is read-only.")
   }
-
-  // ---- Calendars
-
-  SectionTitle { text: qsTr("CALENDARS") }
-
-  Text {
-    width: parent.width
-    visible: root.calendars.length === 0
-    text: qsTr("Nothing synced yet, so there is nothing to choose from.")
-    color: root.faint
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
-    wrapMode: Text.WordWrap
-  }
-
   Repeater {
-    model: root.calendars
-
-    ToggleRow {
+    model: root.document ? root.document.accounts || [] : []
+    Column {
+      id: account
       required property var modelData
-
-      label: modelData.name
-      swatch: modelData.color
-      checked: root.hiddenCalendars.indexOf(modelData.id) === -1
-      onActivated: root.calendarToggled(modelData.id)
-    }
-  }
-
-  // ---- Display
-
-  SectionTitle { text: qsTr("DISPLAY") }
-
-  ToggleRow {
-    label: qsTr("Week starts on Monday")
-    hint: qsTr("Off starts the week on Sunday")
-    checked: root.weekStartsMonday
-    onActivated: root.weekStartToggled()
-  }
-
-  ToggleRow {
-    label: qsTr("Working location events")
-    hint: qsTr("Google's work-from-home markers, hidden by default")
-    checked: root.showWorkingLocation
-    onActivated: root.workingLocationToggled()
-  }
-
-  ToggleRow {
-    // Every row on this page reads "checked means shown". Phrasing this one as
-    // "Hide ..." inverted that and made the page contradict itself.
-    label: qsTr("Declined invitations")
-    hint: qsTr("Shown struck through when on")
-    checked: !root.hideDeclined
-    onActivated: root.hideDeclinedToggled()
-  }
-
-  ToggleRow {
-    label: qsTr("Year and life progress")
-    hint: qsTr("The upstream clock's bars, off by default")
-    checked: root.showYearProgress
-    onActivated: root.yearProgressToggled()
-  }
-
-  // ---- Bar
-
-  SectionTitle { text: qsTr("BAR LABEL") }
-
-  Text {
-    width: parent.width
-    text: qsTr("How early the bar gives up the clock to announce what is next.")
-    color: root.faint
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
-    wrapMode: Text.WordWrap
-  }
-
-  Row {
-    spacing: Style.space(3)
-
-    Repeater {
-      model: [0, 5, 15, 30, 60]
-
-      Rectangle {
-        required property var modelData
-
-        readonly property bool active: modelData === root.announceLeadMinutes
-
-        width: leadLabel.width + Style.space(8)
-        height: leadLabel.height + Style.space(4)
-        radius: height / 2
-        color: active
-          ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.14)
-          : "transparent"
-        border.width: Style.spacing.hairline
-        border.color: active ? root.muted : Qt.darker(root.foreground, 2.4)
-
-        Text {
-          id: leadLabel
-          anchors.centerIn: parent
-          text: modelData === 0 ? qsTr("Never") : modelData + qsTr("min")
-          color: active ? root.foreground : root.faint
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
+      width: parent.width; spacing: Style.space(5)
+      Label { width: parent.width; text: account.modelData.email; elide: Text.ElideRight; font.bold: true }
+      Label {
+        width: parent.width; wrapMode: Text.WordWrap
+        text: account.modelData.error || (account.modelData.syncedAt ? qsTr("Synced ") + Qt.formatDateTime(new Date(account.modelData.syncedAt), "d MMM HH:mm") : qsTr("Waiting for first sync"))
+        color: account.modelData.error ? Color.urgent : Color.foreground; opacity: 0.7
+      }
+      RowLayout {
+        Action { text: qsTr("Reconnect"); enabled: !root.busy; onClicked: root.connectRequested("", account.modelData.id) }
+        Action { text: qsTr("Remove"); enabled: !root.busy; onClicked: root.removing = account.modelData.id }
+      }
+      Column {
+        visible: root.removing === account.modelData.id
+        width: parent.width; spacing: Style.space(4)
+        Label { width: parent.width; wrapMode: Text.WordWrap; text: qsTr("Remove this account's saved login and cached events from this device?") }
+        Row {
+          Action { text: qsTr("Remove account"); enabled: !root.busy; onClicked: { root.removeRequested(account.modelData.id); root.removing = "" } }
+          Action { text: qsTr("Cancel"); onClicked: root.removing = "" }
         }
-
-        TapHandler { onTapped: root.leadMinutesPicked(modelData) }
+      }
+      Repeater {
+        model: root.document ? (root.document.calendars || []).filter(function(c) { return c.accountId === account.modelData.id }) : []
+        Action {
+          required property var modelData
+          width: parent.width
+          text: (root.hiddenCalendars.indexOf(modelData.id) === -1 ? "✓  " : "○  ") + Model.truncateTitle(modelData.name, 48)
+          tooltipText: modelData.name
+          horizontalPadding: Style.space(16)
+          Rectangle {
+            x: Style.space(5); anchors.verticalCenter: parent.verticalCenter
+            width: Style.space(3); height: Style.space(14); radius: 2
+            color: parent.modelData.color
+          }
+          accent: modelData.color; foreground: modelData.color; leftAlign: true
+          selected: root.hiddenCalendars.indexOf(modelData.id) === -1
+          onClicked: root.calendarToggled(modelData.id)
+        }
       }
     }
   }
-
-  // ---- Sync status. Read-only on purpose: changing the Google account is an
-  //      OAuth browser flow, which belongs to sync/setup and not to a popup
-  //      in a status bar. What belongs here is knowing whether it is working.
-
-  SectionTitle { text: qsTr("SYNC") }
-
-  Text {
+  RowLayout {
     width: parent.width
-    color: root.syncState === "missing" && syncHover.hovered ? root.foreground : root.faint
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
-    wrapMode: Text.WordWrap
-
-    HoverHandler {
-      id: syncHover
-      enabled: root.syncState === "missing"
-      cursorShape: Qt.PointingHandCursor
-    }
-
-    TapHandler {
-      enabled: root.syncState === "missing"
-      onTapped: root.setupCommandCopyRequested()
-    }
-
-    text: {
-      if (root.syncState === "missing") {
-        return root.setupCommandCopied
-          ? qsTr("Copied. Paste it in a terminal:\n%1").arg(root.setupCommand)
-          : qsTr("No calendar connected yet. Click to copy, then run:\n%1").arg(root.setupCommand)
-      }
-      if (root.syncState === "version") return qsTr("The events file was written by a newer version of this plugin.")
-
-      var line = root.eventCount + qsTr(" events from ") + root.sourceLabel
-      if (root.syncState === "stale") {
-        return line + qsTr("\nLast sync looks old. Check: journalctl --user -u omarchy-calendar-sync")
-      }
-      return line + qsTr("\nLast sync ") + root.syncedAt
-    }
+    Action { text: qsTr("Connect Google account"); selected: true; enabled: !root.busy; onClicked: root.connectRequested("", "") }
   }
+  FileDialog {
+    id: picker
+    title: qsTr("Choose Google Desktop OAuth credentials")
+    nameFilters: ["Google credentials (*.json)"]
+    onAccepted: root.connectRequested(decodeURIComponent(String(selectedFile).replace(/^file:\/\//, "")), "")
+  }
+  Label {
+    width: parent.width; wrapMode: Text.WordWrap; opacity: 0.6
+    text: qsTr("Sign in through your browser and choose the calendars to display. Your login stays in your desktop keyring.")
+  }
+  Action {
+    text: (root.advancedOpen ? "▾ " : "▸ ") + qsTr("Advanced setup")
+    onClicked: root.advancedOpen = !root.advancedOpen
+  }
+  Label {
+    visible: root.advancedOpen
+    width: parent.width; wrapMode: Text.WordWrap; opacity: 0.6
+    text: qsTr("Use your own Google OAuth app instead of the shared registration. Import a Desktop app credentials JSON, then sign in. This preference applies to new accounts on this device.")
+  }
+  Action {
+    visible: root.advancedOpen
+    text: qsTr("Import credentials…"); bordered: true; enabled: !root.busy; onClicked: picker.open()
+  }
+  Action {
+    visible: root.advancedOpen
+    text: qsTr("Open Google Cloud setup")
+    onClicked: Qt.openUrlExternally("https://console.cloud.google.com/auth/clients")
+  }
+  Label { text: qsTr("DISPLAY"); font.bold: true; font.letterSpacing: 1; opacity: 0.6 }
+  Action { text: (root.weekStartsMonday ? "✓  " : "○  ") + qsTr("Week starts Monday"); onClicked: root.weekStartToggled() }
+  Action { text: (!root.hideDeclined ? "✓  " : "○  ") + qsTr("Show declined invitations"); onClicked: root.declinedToggled() }
+  Label { width: parent.width; wrapMode: Text.WordWrap; visible: text !== ""; text: root.message; color: Color.accent }
 }
