@@ -23,7 +23,7 @@ from .cli import resolve_local_timezone, write_atomic
 from .normalize import normalize_all, _https_only
 
 SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
-          'https://www.googleapis.com/auth/calendar.events.readonly']
+          'https://www.googleapis.com/auth/calendar.events']
 TOKEN_URL = 'https://oauth2.googleapis.com/token'
 API = 'https://www.googleapis.com/calendar/v3'
 APP = 'smo.calendar'
@@ -34,22 +34,22 @@ class CalendarError(Exception):
     pass
 
 
-def request_json(url, data=None, token=None):
+def request_json(url, data=None, token=None, method=None):
     headers = {'Accept': 'application/json'}
     if token:
         headers['Authorization'] = 'Bearer ' + token
-    body = urlencode(data).encode() if data is not None else None
+    body = (json.dumps(data).encode() if method == 'PATCH' else urlencode(data).encode()) if data is not None else None
     if body is not None:
-        headers['Content-Type'] = 'application/x-www-form-urlencoded'
+        headers['Content-Type'] = 'application/json' if method == 'PATCH' else 'application/x-www-form-urlencoded'
     try:
-        with urlopen(Request(url, data=body, headers=headers), timeout=25) as response:
+        with urlopen(Request(url, data=body, headers=headers, method=method), timeout=25) as response:
             return json.load(response)
     except HTTPError as error:
         # Never echo provider bodies: they can contain account data or tokens.
         if error.code == 401:
             raise CalendarError('Google authorization expired. Reconnect this account.') from None
         if error.code == 403:
-            raise CalendarError('Access denied. Check Calendar API access and account permissions.') from None
+            raise CalendarError('Access denied. Reconnect this account to grant Calendar permissions, or check calendar access.') from None
         raise CalendarError(f'Google request failed (HTTP {error.code}). Try reconnecting if it persists.') from None
     except (URLError, TimeoutError, ValueError):
         raise CalendarError('Could not reach Google. Cached events are still available.') from None
@@ -229,7 +229,7 @@ def fetch_account(account, now, tz):
             continue
         color = raw.get('backgroundColor', '')
         calendar = dict(id=account['id'] + ':' + raw['id'], googleId=raw['id'], accountId=account['id'],
-                        accountEmail=account['email'], name=raw.get('summaryOverride') or raw.get('summary') or raw['id'],
+                        accountEmail=account['email'], primary=raw.get('primary', False), name=raw.get('summaryOverride') or raw.get('summary') or raw['id'],
                         color=color if re.fullmatch(r'#[0-9a-fA-F]{6}', color) else '#89b4fa')
         calendars.append(calendar)
         params = dict(timeMin=(now - timedelta(days=31)).isoformat(),
@@ -238,8 +238,42 @@ def fetch_account(account, now, tz):
         for event in list_all('/calendars/' + quote(raw['id'], safe='') + '/events', token, params):
             for row in normalize_all([event], calendar, tz):
                 row.update(accountId=account['id'], accountEmail=account['email'], iCalUID=event.get('iCalUID', ''))
+                attendee = own_attendee(event, account, calendar)
+                row['canRespond'] = bool(attendee and not attendee.get('organizer') and raw.get('accessRole') in ('owner', 'writer'))
                 events.append(row)
     return calendars, events
+
+
+def own_attendee(event, account, calendar):
+    return next((a for a in (event.get('attendees') or []) if a.get('self') and
+                 (calendar.get('primary') or a.get('email', '').lower() == account['email'].lower())), None)
+
+
+def respond(folder, account_id, calendar_id, event_id, response):
+    if response not in ('accepted', 'declined'):
+        raise CalendarError('Choose Accept or Reject.')
+    with locked(folder):
+        doc = read_document(folder)
+        account = next((a for a in doc['accounts'] if a['id'] == account_id), None)
+        calendar = next((c for c in doc['calendars'] if c['id'] == calendar_id and c['accountId'] == account_id), None)
+        rows = [e for e in doc['events'] if e.get('accountId') == account_id and e['calendarId'] == calendar_id and e['id'] == event_id]
+        if not account or not calendar or not rows or not rows[0].get('canRespond'):
+            raise CalendarError('This invitation cannot be answered here. Refresh your calendar or open the event.')
+        credentials = keyring('lookup', account_id)
+        tokens = request_json(TOKEN_URL, dict(credentials, grant_type='refresh_token'))
+        if 'scope' in tokens and SCOPES[-1] not in tokens['scope'].split():
+            raise CalendarError('Reconnect this account in settings to enable Accept and Reject.')
+        url = API + '/calendars/' + quote(calendar['googleId'], safe='') + '/events/' + quote(event_id, safe='')
+        event = request_json(url, token=tokens['access_token'])
+        attendee = own_attendee(event, account, calendar)
+        if event.get('status') == 'cancelled' or not attendee or attendee.get('organizer') or attendee.get('responseStatus') not in ('needsAction', 'tentative'):
+            raise CalendarError('This invitation is no longer pending. Refresh your calendar.')
+        # attendeesOmitted updates only this response, preserving all other guests.
+        request_json(url + '?sendUpdates=all', {'attendeesOmitted': True, 'attendees': [
+            {'email': attendee['email'], 'responseStatus': response}]}, token=tokens['access_token'], method='PATCH')
+        for row in rows:
+            row['responseStatus'] = response
+        write_atomic(folder / 'events.json', doc)
 
 
 def sync(folder):
@@ -312,6 +346,11 @@ def main(argv=None):
     add.add_argument('--client', help='Google Desktop app credentials JSON')
     add.add_argument('--account', help='Reconnect an existing account')
     commands.add_parser('remove').add_argument('account')
+    reply = commands.add_parser('respond')
+    reply.add_argument('account')
+    reply.add_argument('calendar')
+    reply.add_argument('event')
+    reply.add_argument('response', choices=('accepted', 'declined'))
     args = parser.parse_args(argv)
     try:
         if args.command == 'notify':
@@ -323,6 +362,8 @@ def main(argv=None):
             sync(args.state_dir)
         elif args.command == 'remove':
             remove(args.state_dir, args.account)
+        elif args.command == 'respond':
+            respond(args.state_dir, args.account, args.calendar, args.event, args.response)
         doc = read_document(args.state_dir)
         print(json.dumps({'accounts': doc['accounts'], 'eventCount': len(doc['events'])}))
     except (CalendarError, OSError) as error:

@@ -530,3 +530,41 @@ test('start alerts respect start time, visibility, recurrence, and account routi
   const [noLink] = Model.startAlerts([{...event, meetingUrl:'javascript:bad', eventUrl:''}], now, {})
   assert.equal(noLink.url, '')
 })
+
+test('RSVP controls only appear for actionable pending invitations', () => {
+  const invitation = {accountId: 'work', calendarId: 'work:c', id: 'event', canRespond: true}
+  for (const status of ['needsAction', 'tentative'])
+    assert.equal(Model.canRespond({...invitation, responseStatus: status}), true)
+  for (const status of ['accepted', 'declined', '', undefined])
+    assert.equal(Model.canRespond({...invitation, responseStatus: status}), false)
+  assert.equal(Model.canRespond({...invitation, responseStatus: 'needsAction', canRespond: false}), false)
+  assert.equal(Model.canRespond(null), false)
+  const copy = {...invitation, iCalUID: 'shared', dateKey: '2026-09-08', start: '2026-09-08T12:00:00Z', title: 'Meeting', responseStatus: 'needsAction'}
+  assert.equal(Model.mergedEvents([{...copy, accountId: 'readonly', canRespond: false}, copy], [])[0].accountId, 'work')
+})
+
+test('done survives fresh event data, covers shared/day copies, and excludes other occurrences', () => {
+  const now = Date.parse('2026-09-08T12:00:00Z')
+  const event = {id: 'a', accountId: 'work', calendarId: 'work:c', iCalUID: 'series',
+    dateKey: '2026-09-08', start: '2026-09-08T12:00:00Z', end: '2026-09-08T13:00:00Z',
+    title: 'Meeting', meetingUrl: 'https://meet.google.com/abc'}
+  const copy = {...event, accountId: 'personal', calendarId: 'personal:c'}
+  const tomorrow = {...event, id: 'b', dateKey: '2026-09-09', start: '2026-09-09T12:00:00Z', end: '2026-09-09T13:00:00Z'}
+  const doneEvents = JSON.parse(JSON.stringify([Model.occurrenceKey(event)]))
+  const events = Model.mergedEvents([event, copy, tomorrow], [], {doneEvents})
+  assert.equal(events.length, 2)
+  assert.equal(events[0].done, true)
+  assert.equal(!!events[1].done, false)
+  assert.equal(event.done, undefined)
+  assert.equal(Model.featuredEvent(events, now).id, 'b')
+  assert.equal(Model.nextEvent(events, now).id, 'b')
+  assert.deepEqual(Model.startAlerts(events, now, {}), [])
+  assert.equal(Model.isJoinableNow(events[0], now, event.dateKey), false)
+  assert.equal(Model.agendaGroups(events, event.dateKey, 1, now)[0].items[0].done, true)
+  assert.equal(Model.mergedEvents([copy], [], {doneEvents})[0].done, true)
+  assert.equal(Model.mergedEvents([{...copy, dateKey: '2026-09-09'}], [], {doneEvents})[0].done, true)
+  const undone = Model.mergedEvents([event], [], {doneEvents: []})
+  assert.equal(Model.featuredEvent(undone, now).id, 'a')
+  assert.equal(Model.startAlerts(undone, now, {}).length, 1)
+  assert.notEqual(Model.occurrenceKey({...event, iCalUID: ''}), Model.occurrenceKey({...copy, iCalUID: ''}))
+})

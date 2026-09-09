@@ -356,6 +356,15 @@ function isDeclined(event) {
   return !!event && String(event.responseStatus || "") === "declined"
 }
 
+function canRespond(event) {
+  return !!event && event.canRespond === true && !!event.accountId && !!event.calendarId && !!event.id
+    && (event.responseStatus === "needsAction" || event.responseStatus === "tentative")
+}
+
+function occurrenceKey(event) {
+  return JSON.stringify([event.iCalUID || [event.accountId, event.calendarId, event.id], Date.parse(event.start)])
+}
+
 function isOutOfOffice(event) {
   return !!event && String(event.eventType || "") === "outOfOffice"
 }
@@ -419,10 +428,10 @@ function startAlerts(events, nowMs, notified) {
   var alerts = [], seen = {}
   ;(events || []).forEach(function(event) {
     var start = Date.parse(event.start), end = Date.parse(event.end)
-    if (event.allDay || isDeclined(event) || isNoisyEventType(event) || isOutOfOffice(event)
+    if (event.done || event.allDay || isDeclined(event) || isNoisyEventType(event) || isOutOfOffice(event)
         || event.status === "cancelled" || !isFinite(start) || nowMs < start || nowMs - start >= 60000
         || (isFinite(end) && end > start && end <= nowMs)) return
-    var key = JSON.stringify([event.iCalUID || [event.accountId, event.calendarId, event.id], start])
+    var key = occurrenceKey(event)
     if (seen[key] || (notified && notified[key])) return
     seen[key] = true
     var meeting = meetingUrlFor(event), url = meeting || eventUrlFor(event)
@@ -441,7 +450,7 @@ var JOIN_LEAD_MINUTES = 15
 var JOIN_GRACE_MINUTES = 15
 
 function isJoinableNow(event, nowMs, todayKey) {
-  if (!meetingUrlFor(event)) return false
+  if (!event || event.done || !meetingUrlFor(event)) return false
 
   // An all-day event has no useful clock window, so it stays joinable for the
   // whole day it belongs to.
@@ -480,13 +489,16 @@ function visibleEvents(events, hidden, options) {
 // Filter before deduplication so hiding one copy never hides a shared event.
 function mergedEvents(events, hidden, options) {
   var seen = {}, result = []
+  var doneEvents = (options && options.doneEvents) || []
   var visible = visibleEvents(events, hidden, options)
-  visible.sort(function(a, b) { return Number(isDeclined(a)) - Number(isDeclined(b)) })
+  visible.sort(function(a, b) {
+    return Number(isDeclined(a)) - Number(isDeclined(b)) || Number(canRespond(b)) - Number(canRespond(a))
+  })
   visible.forEach(function(event) {
     var key = event.iCalUID ? JSON.stringify([event.iCalUID, Date.parse(event.start), event.dateKey]) : ""
     if (key && seen[key]) return
     if (key) seen[key] = true
-    result.push(event)
+    result.push(doneEvents.indexOf(occurrenceKey(event)) !== -1 ? Object.assign({}, event, {done: true}) : event)
   })
   return result.sort(function(a, b) {
     return a.dateKey.localeCompare(b.dateKey) || Number(b.allDay) - Number(a.allDay)
@@ -496,7 +508,7 @@ function mergedEvents(events, hidden, options) {
 
 function featuredEvent(events, nowMs) {
   var live = (events || []).filter(function(e) {
-    return !e.allDay && !isDeclined(e) && Date.parse(e.start) <= nowMs && Date.parse(e.end) > nowMs
+    return !e.done && !e.allDay && !isDeclined(e) && Date.parse(e.start) <= nowMs && Date.parse(e.end) > nowMs
   }).sort(function(a, b) { return Date.parse(a.end) - Date.parse(b.end) })
   return live[0] || nextEvent((events || []).filter(function(e) { return !isDeclined(e) }), nowMs)
 }
@@ -529,7 +541,7 @@ function nextEvent(events, nowMs) {
 
   for (var i = 0; i < (events || []).length; i++) {
     var event = events[i]
-    if (!event || event.allDay) continue
+    if (!event || event.done || event.allDay) continue
 
     var startMs = Date.parse(event.start)
     if (isNaN(startMs) || startMs < nowMs) continue
@@ -688,6 +700,8 @@ if (typeof module !== "undefined") {
     visibleEvents: visibleEvents,
     isNoisyEventType: isNoisyEventType,
     isDeclined: isDeclined,
+    canRespond: canRespond,
+    occurrenceKey: occurrenceKey,
     isOutOfOffice: isOutOfOffice,
     safeUrl: safeUrl,
     commandPathFromUrl: commandPathFromUrl,

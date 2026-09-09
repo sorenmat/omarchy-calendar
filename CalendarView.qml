@@ -16,12 +16,16 @@ Column {
   property int viewYear: now.getFullYear()
   property int viewMonth: now.getMonth()
   property bool upcoming: true
+  property bool busy: false
+  property string message: ""
   readonly property var featured: Model.featuredEvent(events, now.getTime())
   readonly property bool live: !!featured && Date.parse(featured.start) <= now.getTime()
   readonly property var groups: Model.agendaGroups(events, upcoming ? Model.keyForDate(now) : selectedKey, upcoming ? 7 : 1, now.getTime())
   readonly property var weeks: Model.monthGrid(viewYear, viewMonth, weekStart, Model.keyForDate(now), Model.indexEventsByDate(events))
   signal openUrl(string url)
   signal connectRequested()
+  signal respondRequested(var event, string response)
+  signal doneRequested(var event)
   spacing: Style.space(12)
 
   function today() {
@@ -51,6 +55,32 @@ Column {
     font.pixelSize: Style.font.bodySmall
   }
   component Action: Button { focusable: true; fontFamily: root.fontFamily; fontSize: Style.font.bodySmall }
+  component EventActions: Flow {
+    required property var entry
+    spacing: Style.space(4)
+    Action {
+      visible: Model.canRespond(entry)
+      enabled: !root.busy
+      text: qsTr("Accept"); bordered: true
+      tooltipText: qsTr("Accept invitation as ") + (entry ? entry.accountEmail || "" : "")
+      onClicked: root.respondRequested(entry, "accepted")
+    }
+    Action {
+      visible: Model.canRespond(entry)
+      enabled: !root.busy
+      text: qsTr("Reject"); bordered: true
+      tooltipText: qsTr("Decline invitation as ") + (entry ? entry.accountEmail || "" : "")
+      onClicked: root.respondRequested(entry, "declined")
+    }
+    Action {
+      visible: !!entry && !entry.allDay && !Model.isDeclined(entry)
+      text: entry && entry.done ? qsTr("Undo done") : qsTr("Mark done")
+      tooltipText: qsTr("Mark this meeting done on this device")
+      onClicked: root.doneRequested(entry)
+    }
+  }
+
+  Label { width: parent.width; visible: text !== ""; text: root.message; wrapMode: Text.WordWrap; color: Color.accent }
 
   RowLayout {
     width: parent.width
@@ -185,6 +215,7 @@ Column {
           onClicked: root.openUrl(Model.eventUrlFor(root.featured))
         }
       }
+      EventActions { width: parent.width; entry: root.featured }
     }
   }
 
@@ -238,13 +269,14 @@ Column {
               Layout.fillWidth: true; spacing: Style.space(3)
               Label {
                 width: parent.width; text: event.modelData.title; elide: Text.ElideRight
-                font.strikeout: Model.isDeclined(event.modelData)
-                opacity: Model.isDeclined(event.modelData) ? 0.5 : 1
+                font.strikeout: event.modelData.done || Model.isDeclined(event.modelData)
+                opacity: event.modelData.done || Model.isDeclined(event.modelData) ? 0.5 : 1
               }
               Label {
                 width: parent.width; text: event.modelData.calendarName + (event.modelData.accountEmail ? " · " + event.modelData.accountEmail : "")
                 font.pixelSize: Style.font.caption; opacity: 0.45; elide: Text.ElideRight
               }
+              EventActions { width: parent.width; entry: event.modelData }
             }
             Action {
               visible: !Model.isDeclined(event.modelData) && Model.isJoinableNow(event.modelData, root.now.getTime(), Model.keyForDate(root.now))

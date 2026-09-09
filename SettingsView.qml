@@ -29,7 +29,7 @@ Column {
   Label { text: qsTr("GOOGLE ACCOUNTS"); font.bold: true; font.letterSpacing: 1; opacity: 0.6 }
   Label {
     width: parent.width; wrapMode: Text.WordWrap; opacity: 0.7
-    text: qsTr("Connect each Google account once, then choose the calendars to show. Access is read-only.")
+    text: qsTr("Connect your Google accounts to show calendars and respond to invitations. Previously connected accounts need to reconnect once to enable Accept and Reject.")
   }
   Repeater {
     model: root.document ? root.document.accounts || [] : []

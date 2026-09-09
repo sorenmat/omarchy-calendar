@@ -14,8 +14,8 @@ Window {
     x: 20; y: 20; width: parent.width - 40
     now: new Date(2026, 8, 8, 13, 50)
     events: [
-      {id:"a", calendarId:"work", calendarName:"Work", color:"#89b4fa", accountEmail:"alex@studio.example", dateKey:"2026-09-08", start:"2026-09-08T14:00:00+02:00", end:"2026-09-08T14:45:00+02:00", allDay:false, title:"Design review", meetingUrl:"https://meet.google.com/example", eventUrl:"https://calendar.google.com"},
-      {id:"b", calendarId:"personal", calendarName:"Personal", color:"#a6da95", accountEmail:"alex@example.com", dateKey:"2026-09-08", start:"2026-09-08T16:00:00+02:00", end:"2026-09-08T16:30:00+02:00", allDay:false, title:"Pick up the kids", eventUrl:"https://calendar.google.com"},
+      {id:"a", accountId:"demo", canRespond:true, responseStatus:"needsAction", calendarId:"work", calendarName:"Work", color:"#89b4fa", accountEmail:"alex@studio.example", dateKey:"2026-09-08", start:"2026-09-08T14:00:00+02:00", end:"2026-09-08T14:45:00+02:00", allDay:false, title:"Design review", meetingUrl:"https://meet.google.com/example", eventUrl:"https://calendar.google.com"},
+      {id:"b", done:true, calendarId:"personal", calendarName:"Personal", color:"#a6da95", accountEmail:"alex@example.com", dateKey:"2026-09-08", start:"2026-09-08T16:00:00+02:00", end:"2026-09-08T16:30:00+02:00", allDay:false, title:"Pick up the kids", eventUrl:"https://calendar.google.com"},
       {id:"c", calendarId:"work", calendarName:"Work", color:"#89b4fa", dateKey:"2026-09-09", start:"2026-09-09T09:30:00+02:00", end:"2026-09-09T10:00:00+02:00", allDay:false, title:"Weekly planning", eventUrl:"https://calendar.google.com"},
       {id:"d", calendarId:"family", calendarName:"Family", color:"#f5bde6", dateKey:"2026-09-10", start:"2026-09-10T00:00:00+02:00", end:"2026-09-11T00:00:00+02:00", allDay:true, title:"Emma’s birthday"}
     ]

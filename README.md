@@ -26,7 +26,7 @@ The installer links this checkout into `~/.config/omarchy/plugins/smo.calendar`,
 
 ## Connect Google
 
-Open the widget → settings → **Connect Google account**. Sign in in your browser and approve both read-only Calendar permissions. Repeat for additional Google accounts.
+Open the widget → settings → **Connect Google account**. Sign in in your browser and approve Calendar list and event permissions. Repeat for additional Google accounts.
 
 The publisher supplies a Google Desktop OAuth registration in `oauth-client.json` at the plugin root (the Google download's `installed` object). The publisher’s registration is configured locally while Google verification is in progress and is not included in this source repository. Until the public OAuth release, use **Advanced setup → Import credentials…** with your own Desktop client. It identifies the app; each user's access and refresh tokens remain private in their own keyring. The helper uses fixed Google endpoints rather than endpoint URLs from the credentials file.
 
@@ -36,7 +36,7 @@ The publisher supplies a Google Desktop OAuth registration in `oauth-client.json
 
 1. In your Google Cloud project, enable **Google Calendar API**.
 2. Configure the Google Auth Platform audience and consent screen. For development in Testing, add your accounts as test users. Google expires External/Testing refresh tokens after seven days with Calendar scopes; configure production publishing before relying on it daily.
-3. Declare `calendar.calendarlist.readonly` and `calendar.events.readonly` (both prefixed by `https://www.googleapis.com/auth/`). Identity also uses `openid` and `email`.
+3. Declare `calendar.calendarlist.readonly` and `calendar.events` (both prefixed by `https://www.googleapis.com/auth/`). Identity also uses `openid` and `email`.
 4. Create an OAuth client of type **Desktop app**, and download its JSON file. For the shared registration, supply it as `oauth-client.json`; for a local override, use Advanced setup to import it. Public distribution also requires the applicable Google verification.
 
 No hosted backend. The helper binds a temporary callback listener to `127.0.0.1`, validates OAuth state, and exchanges the code with PKCE S256. Google user tokens and imported overrides are stored through Secret Service, never in the plugin config or logs. Workspace administrators may need to approve access.
@@ -48,15 +48,17 @@ Each account has an independent sync status and cache. Sync runs on shell startu
 - Click a day for its complete agenda, including earlier events.
 - **Next 7 days** shows the upcoming agenda, grouped by day.
 - The meeting card follows a live meeting, then the next timed event. All-day and declined events never take over the card.
+- **Accept / Reject** responds to pending or tentative invitations using the displayed account. Reconnect previously connected accounts once to grant event write permission. Responses apply to this occurrence and are sent to Google.
+- **Mark done** marks a timed meeting complete locally, removing it from the featured card, bar countdown, Join actions, and start alerts. It stays crossed out in the agenda with **Undo done**. Completion survives restarts and syncs; shared copies of the same occurrence share completion, while other recurring occurrences remain unchanged.
 - **Join meeting** opens its HTTPS video link; **Open event** opens Google's event page.
 - Google Meet and **Open event** links select the account that synced the event using its email (`authuser`), independent of the browser's account order. That account must also be signed in in the browser. Other providers keep their original links.
 - When a timed event starts, a desktop alert appears. Click it to join the meeting or open the event using the matching account. Alerts work while the popup is closed, respect Do Not Disturb, and skip hidden calendars, declined invitations, all-day events, and out-of-office blocks. Shared events alert once across monitors and shell restarts. Events that started less than a minute ago can still alert after a late sync or wake; older events do not.
 - Arrow keys select days; `[` / `]` change month; `t` returns to today; `r` refreshes; `s` opens settings; `m` joins the featured meeting. Tab moves between controls; Escape backs out or closes.
 - Right-click the bar clock to cycle its date format.
 
-The read-only sync expands recurring events through Google and normalizes them in your local IANA timezone. It fetches the past 31 days and next 93 days. Dates outside that range are labelled. Calendars with only free/busy access cannot supply event details and are omitted.
+The sync expands recurring events through Google and normalizes them in your local IANA timezone. It fetches the past 31 days and next 93 days. Dates outside that range are labelled. Calendars with only free/busy access cannot supply event details and are omitted.
 
-State: `${XDG_STATE_HOME:-~/.local/state}/smo.calendar/events.json`, containing calendar metadata, account email addresses and cached events. Files are written atomically with private permissions. Removing an account clears its keyring token and local cache; it does not change Google events. To revoke the grant at Google too, use your Google Account's third-party connections page.
+State: `${XDG_STATE_HOME:-~/.local/state}/smo.calendar/events.json`, containing calendar metadata, account email addresses and cached events. Done markers are stored in the plugin’s local shell settings. Files are written atomically with private permissions. Removing an account clears its keyring token and local cache; it does not change Google events. To revoke the grant at Google too, use your Google Account's third-party connections page.
 
 ## CLI and checks
 
@@ -65,6 +67,7 @@ State: `${XDG_STATE_HOME:-~/.local/state}/smo.calendar/events.json`, containing 
 ./calendarctl connect
 ./calendarctl sync
 ./calendarctl status
+./calendarctl respond ACCOUNT_ID CALENDAR_ID EVENT_ID accepted
 ./calendarctl remove ACCOUNT_ID
 node --test tests/model.test.js
 PYTHONPATH=sync python3 -m unittest discover -s tests -t .
@@ -77,7 +80,7 @@ The older upstream `sync/setup` and `omarchy-calendar-sync` files remain for ref
 
 ## Validation limits
 
-UI previews use synthetic events. Offline tests cover callback validation, token handling, account isolation, partial failures, pagination, date normalization, and calendar filtering. Live Google consent and refresh have not yet been validated against an account. Google verification is still in progress.
+UI previews use synthetic events. Offline tests cover callback validation, token handling, account isolation, partial failures, pagination, date normalization, and calendar filtering. Live Google consent, refresh, and invitation responses have not yet been validated against an account. Google verification is still in progress.
 
 ## Policies
 

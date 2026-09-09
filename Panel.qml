@@ -22,7 +22,7 @@ Panel {
   property string operation: ""
   readonly property var hiddenCalendars: setting("hiddenCalendars", [])
   readonly property int weekStart: Model.normalizedWeekStart(setting("weekStartDay", null), Qt.locale().firstDayOfWeek)
-  readonly property var visibleEventList: Model.mergedEvents(eventDoc ? eventDoc.events : [], hiddenCalendars, {hideDeclined: setting("hideDeclined", false)})
+  readonly property var visibleEventList: Model.mergedEvents(eventDoc ? eventDoc.events : [], hiddenCalendars, {hideDeclined: setting("hideDeclined", false), doneEvents: setting("doneEvents", [])})
   readonly property bool needsAttention: !!eventDoc && (eventDoc.accounts || []).some(function(a) { return !!a.error || !a.syncedAt || root.now.getTime() - Date.parse(a.syncedAt) > 1200000 })
 
   function persist(values) {
@@ -34,6 +34,11 @@ Panel {
     if (bar && bar.shell) bar.shell.updateEntryInline(root.moduleName, entry)
   }
   function toggleWeekStart() { persist({weekStartDay: Model.weekStartSettingName(Model.toggledWeekStart(weekStart))}) }
+  function toggleDone(event) {
+    var key = Model.occurrenceKey(event)
+    var done = setting("doneEvents", [])
+    persist({doneEvents: done.indexOf(key) === -1 ? done.concat([key]) : done.filter(function(k) { return k !== key })})
+  }
   function refresh() { root.now = new Date(); eventsFile.reload() }
   function open() { refresh(); calendar.today(); root.controller.show() }
   function close() { root.controller.hide() }
@@ -41,7 +46,7 @@ Panel {
   function run(args) {
     if (backend.running) return
     operation = args[0]
-    statusMessage = operation === "connect" ? "Complete Google sign-in in your browser…" : "Updating calendar…"
+    statusMessage = operation === "connect" ? "Complete Google sign-in in your browser…" : operation === "respond" ? "Sending response…" : "Updating calendar…"
     backend.command = ["python3", helper, "--state-dir", stateDir].concat(args)
     backend.running = true
   }
@@ -72,7 +77,7 @@ Panel {
       onStreamFinished: {
         try {
           var result = JSON.parse(text)
-          root.statusMessage = result.error || (result.accounts.some(function(a) { return !!a.error }) ? "Some accounts need attention. Cached events are still shown." : "Calendar updated.")
+          root.statusMessage = result.error || (root.operation === "respond" ? "Response sent." : result.accounts.some(function(a) { return !!a.error }) ? "Some accounts need attention. Cached events are still shown." : "Calendar updated.")
         } catch (error) { root.statusMessage = "Calendar helper could not finish. Try again." }
       }
     }
@@ -142,6 +147,9 @@ Panel {
             id: calendar
             visible: !root.settingsOpen; width: parent.width
             events: root.visibleEventList; document: root.eventDoc; now: root.now; weekStart: root.weekStart
+            busy: backend.running; message: root.statusMessage
+            onRespondRequested: function(event, response) { root.run(["respond", event.accountId, event.calendarId, event.id, response]) }
+            onDoneRequested: function(event) { root.toggleDone(event) }
             onOpenUrl: function(url) { root.openLink(url) }
             onConnectRequested: root.settingsOpen = true
           }

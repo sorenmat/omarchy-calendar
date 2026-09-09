@@ -1,6 +1,6 @@
 # Privacy policy — Calendar & Agenda for Omarchy
 
-Effective date: 8 September 2026
+Effective date: 9 September 2026
 
 Calendar & Agenda for Omarchy is an open-source desktop calendar plugin maintained by sorenmat. It displays events from the Google accounts and calendars you choose to connect.
 
@@ -8,11 +8,11 @@ Calendar & Agenda for Omarchy is an open-source desktop calendar plugin maintain
 
 With your permission, the plugin accesses your Google account identifier and verified email address, the list of calendars you subscribe to, and events from calendars you can read. Event data includes titles, dates and times, locations, meeting and event links, calendar colours, event types, and your invitation response. Google may return additional fields in an API response; the plugin keeps only the fields needed for its calendar and agenda features.
 
-The plugin requests read-only Calendar access. It does not create, edit, or delete Google Calendar events and does not read Gmail messages.
+The plugin requests read access to your calendar list and read/write access to calendar events. Event writes are used when you choose Accept or Reject to send your invitation response to Google. It does not create or delete events or read Gmail messages.
 
 ## How data is used and stored
 
-Data is used to display your month calendar, agenda, upcoming-event countdowns, and meeting actions. Calendar metadata and events are cached on your device so the display remains available between syncs and when a request fails. Account tokens are stored in your desktop's Secret Service keyring. Tokens are sent to Google when authenticating or refreshing access.
+Data is used to display your month calendar, agenda, upcoming-event countdowns, and meeting actions. Calendar metadata and events are cached on your device so the display remains available between syncs and when a request fails. Meeting completion markers are stored locally in the plugin’s shell settings and are not sent to Google; use Undo done to remove a marker. Account tokens are stored in your desktop's Secret Service keyring. Tokens are sent to Google when authenticating or refreshing access.
 
 At event start, the plugin sends the event title, calendar name, account email, and meeting or event link to your local desktop notification service. Omarchy may retain these in notification history. A local record of hashed event identifiers and start times prevents duplicate alerts; older entries are pruned when subsequent alerts are processed. Removing an account from the plugin does not clear notifications already stored by the desktop.
 

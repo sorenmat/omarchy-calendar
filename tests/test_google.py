@@ -8,6 +8,79 @@ from omarchy_calendar_sync import google
 
 
 class GoogleTests(unittest.TestCase):
+    def test_rsvp_targets_own_occurrence_and_only_updates_cache_after_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            doc = google.read_document(folder)
+            account = dict(id='work', email='me@example.com')
+            calendar = dict(id='work:c', accountId='work', googleId='me@example.com', primary=True)
+            row = dict(id='instance/one', accountId='work', calendarId='work:c', canRespond=True,
+                       responseStatus='needsAction', dateKey='2026-09-08')
+            doc.update(accounts=[account], calendars=[calendar], events=[row, dict(row, dateKey='2026-09-09'),
+                dict(row, accountId='personal'), dict(row, id='instance/two')])
+            google.write_atomic(folder / 'events.json', doc)
+            own = dict(email='me@example.com', self=True, responseStatus='needsAction')
+            raw = dict(attendees=[dict(email='other@example.com', responseStatus='accepted'), own])
+            token = dict(access_token='access', scope=' '.join(google.SCOPES))
+            with patch.object(google, 'keyring', return_value={}) as keyring, patch.object(google, 'request_json') as request:
+                request.side_effect = [token, raw, google.CalendarError('offline')]
+                with self.assertRaisesRegex(google.CalendarError, 'offline'):
+                    google.respond(folder, 'work', 'work:c', 'instance/one', 'accepted')
+                self.assertEqual(google.read_document(folder), doc)
+                for response in ('accepted', 'declined'):
+                    request.side_effect = [token, raw, {}]
+                    google.respond(folder, 'work', 'work:c', 'instance/one', response)
+                    args, kwargs = request.call_args
+                    self.assertEqual(args[0], google.API + '/calendars/me%40example.com/events/instance%2Fone?sendUpdates=all')
+                    self.assertEqual(args[1], {'attendeesOmitted': True, 'attendees': [{'email': own['email'], 'responseStatus': response}]})
+                    self.assertEqual(kwargs, dict(token='access', method='PATCH'))
+                    statuses = [e['responseStatus'] for e in google.read_document(folder)['events']]
+                    self.assertEqual(statuses, [response, response, 'needsAction', 'needsAction'])
+                    keyring.assert_called_with('lookup', 'work')
+                for attendee in (dict(own, responseStatus='accepted'), dict(own, organizer=True), dict(own, self=False)):
+                    request.side_effect = [token, dict(attendees=[attendee])]
+                    with self.assertRaisesRegex(google.CalendarError, 'no longer pending'):
+                        google.respond(folder, 'work', 'work:c', 'instance/one', 'accepted')
+                request.side_effect = [dict(token, scope='https://www.googleapis.com/auth/calendar.events.readonly')]
+                with self.assertRaisesRegex(google.CalendarError, 'Reconnect'):
+                    google.respond(folder, 'work', 'work:c', 'instance/one', 'accepted')
+                request.reset_mock()
+                with self.assertRaises(google.CalendarError):
+                    google.respond(folder, 'personal', 'work:c', 'instance/one', 'accepted')
+                request.assert_not_called()
+            self.assertIsNone(google.own_attendee(raw, dict(account, email='someone@example.com'), dict(calendar, primary=False)))
+
+    def test_sync_exposes_rsvp_only_for_own_writable_invitation(self):
+        from datetime import datetime, timezone
+        account = dict(id='work', email='me@example.com')
+        calendar = dict(id='me@example.com', primary=True, accessRole='owner')
+        attendee = dict(email='me@example.com', self=True, responseStatus='needsAction')
+        event = dict(id='event', attendees=[attendee], start={'dateTime': '2026-09-08T10:00:00Z'},
+                     end={'dateTime': '2026-09-08T11:00:00Z'})
+        cases = [(calendar, event, True), (dict(calendar, accessRole='reader'), event, False),
+                 (calendar, dict(event, attendees=[dict(attendee, organizer=True)]), False),
+                 (dict(calendar, primary=False), dict(event, attendees=[dict(attendee, email='other@example.com')]), False),
+                 (calendar, dict(event, attendees=None), False)]
+        with patch.object(google, 'keyring', return_value={}), patch.object(google, 'request_json', return_value={'access_token': 'access'}), patch.object(google, 'list_all') as listing:
+            for raw_calendar, raw_event, expected in cases:
+                listing.side_effect = [[raw_calendar], [raw_event]]
+                _, rows = google.fetch_account(account, datetime.now(timezone.utc), timezone.utc)
+                self.assertEqual(rows[0]['canRespond'], expected)
+
+    def test_patch_uses_json_and_oauth_keeps_form_encoding(self):
+        with patch.object(google, 'urlopen') as open_url:
+            open_url.return_value.__enter__.return_value.read.return_value = '{}'
+            body = {'attendeesOmitted': True, 'attendees': [{'email': 'me@example.com', 'responseStatus': 'accepted'}]}
+            google.request_json(google.API + '/event', body, token='private', method='PATCH')
+            request = open_url.call_args.args[0]
+            self.assertEqual(request.method, 'PATCH')
+            self.assertEqual(request.get_header('Content-type'), 'application/json')
+            self.assertEqual(json.loads(request.data), body)
+            google.request_json(google.TOKEN_URL, {'grant_type': 'refresh_token'})
+            request = open_url.call_args.args[0]
+            self.assertEqual(request.get_method(), 'POST')
+            self.assertEqual(request.data, b'grant_type=refresh_token')
+
     def test_start_notifications_are_clickable_and_persist_deduplication(self):
         now = 1788861600000
         alert = dict(key='shared-occurrence', start=now, title='Starting now: <Review>',
