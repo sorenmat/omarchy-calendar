@@ -617,6 +617,14 @@ function shouldAnnounce(event, nowMs, leadMinutes) {
   return delta <= leadMinutes * MINUTE_MS
 }
 
+function shouldPulse(event, nowMs, durationMinutes) {
+  if (!event || event.done || event.allDay || isDeclined(event) || isNoisyEventType(event)
+      || isOutOfOffice(event) || event.status === "cancelled") return false
+  var elapsed = nowMs - Date.parse(event.start)
+  return isFinite(durationMinutes) && durationMinutes > 0 && elapsed >= 0
+    && elapsed < durationMinutes * MINUTE_MS && Date.parse(event.end) > nowMs
+}
+
 // Turn a YYYY-MM-DD key back into a local Date, for formatting a heading.
 // Built field by field rather than parsed from the string, because
 // new Date("2026-08-10") is UTC midnight and lands on the previous day for
@@ -695,6 +703,7 @@ if (typeof module !== "undefined") {
     announceLabel: announceLabel,
     millisUntil: millisUntil,
     shouldAnnounce: shouldAnnounce,
+    shouldPulse: shouldPulse,
     isCalendarHidden: isCalendarHidden,
     toggleHiddenCalendar: toggleHiddenCalendar,
     visibleEvents: visibleEvents,

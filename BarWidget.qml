@@ -34,8 +34,8 @@ BarWidget {
   //      panel Loader is active even while closed, so this keeps counting
   //      whether or not anyone has opened the calendar.
   //
-  //      displayDate is driven by SystemClock at minute precision, which is
-  //      exactly the granularity a "in 10min" countdown needs. No extra timer.
+  //      The clock uses seconds so the start pulse follows
+  //      the event's actual start and stops at the configured deadline.
   readonly property var visibleEventList: panelLoader.item ? panelLoader.item.visibleEventList : []
   readonly property real nowMs: displayDate.getTime()
 
@@ -43,6 +43,28 @@ BarWidget {
   readonly property var upcomingEvent: Model.featuredEvent(visibleEventList, nowMs)
   readonly property bool announcing: announceLeadMinutes > 0
     && (Model.shouldAnnounce(upcomingEvent, nowMs, announceLeadMinutes) || (upcomingEvent && Date.parse(upcomingEvent.start) <= nowMs && Date.parse(upcomingEvent.end) > nowMs))
+  readonly property int startPulseMinutes: setting("startPulseMinutes", 3)
+  readonly property bool pulsing: !vertical && announcing
+    && Model.shouldPulse(upcomingEvent, nowMs, startPulseMinutes)
+  readonly property color normalForeground: bar ? bar.barForeground : Color.foreground
+  readonly property color pulseForeground: bar ? bar.urgent : Color.urgent
+  property color animatedForeground: normalForeground
+
+  function previewMascot() { meetingWalk.preview() }
+
+  MeetingWalk {
+    id: meetingWalk
+    anchorItem: button
+    active: root.pulsing && root.setting("meetingMascot", true)
+    eventKey: root.upcomingEvent ? Model.occurrenceKey(root.upcomingEvent) : ""
+  }
+
+  SequentialAnimation on animatedForeground {
+    running: root.pulsing
+    loops: Animation.Infinite
+    ColorAnimation { from: root.normalForeground; to: root.pulseForeground; duration: 900; easing.type: Easing.InOutSine }
+    ColorAnimation { from: root.pulseForeground; to: root.normalForeground; duration: 900; easing.type: Easing.InOutSine }
+  }
 
   readonly property string countdownPhrase: announcing
     ? (Date.parse(upcomingEvent.start) <= nowMs ? "now" : Model.formatCountdown(Model.millisUntil(upcomingEvent, nowMs)) || "")
@@ -138,7 +160,7 @@ BarWidget {
 
   SystemClock {
     id: clock
-    precision: SystemClock.Minutes
+    precision: SystemClock.Seconds
     onDateChanged: root.displayDate = date
   }
 
@@ -157,6 +179,7 @@ BarWidget {
     target: "smo.calendar"
 
     function refresh(): void { root.broadcast("refresh") }
+    function previewMascot(): void { root.previewMascot() }
     function cycleFormat(): void { root.cycleFormat() }
     function toggleWeekStart(): void { root.toggleWeekStart() }
     function open(): void { root.open() }
@@ -171,6 +194,7 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
+    foreground: root.pulsing ? root.animatedForeground : root.normalForeground
     text: root.vertical ? "" : root.displayText
     labelVisible: !root.vertical
     hasVisualContent: root.vertical ? root.verticalLines.length > 0 : text !== ""

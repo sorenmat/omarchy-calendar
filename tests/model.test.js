@@ -373,6 +373,24 @@ const meeting = (start, end, extra = {}) => ({
 })
 const TKEY = '2026-08-10'
 
+test('meeting start pulse uses the configured window and stops for ended or ineligible events', () => {
+  const event = meeting('2026-08-10T09:00:00-05:00', '2026-08-10T09:30:00-05:00')
+  const start = Date.parse(event.start)
+  assert.equal(Model.shouldPulse(event, start - 1, 3), false)
+  assert.equal(Model.shouldPulse(event, start, 3), true)
+  assert.equal(Model.shouldPulse(event, start + 179999, 3), true)
+  assert.equal(Model.shouldPulse(event, start + 180000, 3), false)
+  assert.equal(Model.shouldPulse(event, start + 180000, 5), true)
+  assert.equal(Model.shouldPulse(event, Date.parse(event.end), 60), false)
+  for (const duration of [0, -1, NaN, Infinity])
+    assert.equal(Model.shouldPulse(event, start, duration), false)
+  for (const extra of [{done:true}, {allDay:true}, {responseStatus:'declined'},
+    {eventType:'workingLocation'}, {eventType:'outOfOffice'}, {status:'cancelled'},
+    {start:'invalid'}, {end:'invalid'}, {end:event.start}])
+    assert.equal(Model.shouldPulse({...event, ...extra}, start, 3), false)
+  assert.equal(Model.shouldPulse(null, start, 3), false)
+})
+
 test('isJoinableNow opens 15 minutes before the start', () => {
   const e = meeting('2026-08-10T09:00:00-05:00', '2026-08-10T09:30:00-05:00')
   const at = t => Model.isJoinableNow(e, Date.parse(t), TKEY)

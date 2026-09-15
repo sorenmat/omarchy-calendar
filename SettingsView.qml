@@ -12,6 +12,8 @@ Column {
   property bool busy: false
   property bool weekStartsMonday: true
   property bool hideDeclined: false
+  property int startPulseMinutes: 3
+  property bool meetingMascot: true
   property string message: ""
   property string removing: ""
   property bool advancedOpen: false
@@ -20,6 +22,9 @@ Column {
   signal calendarToggled(string id)
   signal weekStartToggled()
   signal declinedToggled()
+  signal startPulseMinutesEdited(int minutes)
+  signal meetingMascotToggled()
+  signal mascotPreviewRequested()
   spacing: Style.space(12)
   component Label: Text {
     textFormat: Text.PlainText; color: Color.foreground
@@ -111,5 +116,16 @@ Column {
   Label { text: qsTr("DISPLAY"); font.bold: true; font.letterSpacing: 1; opacity: 0.6 }
   Action { text: (root.weekStartsMonday ? "✓  " : "○  ") + qsTr("Week starts Monday"); onClicked: root.weekStartToggled() }
   Action { text: (!root.hideDeclined ? "✓  " : "○  ") + qsTr("Show declined invitations"); onClicked: root.declinedToggled() }
+  NumberField {
+    label: qsTr("Meeting start pulse (minutes, 0 = off)")
+    value: root.startPulseMinutes; from: 0; to: 60
+    onModified: function(value) { root.startPulseMinutesEdited(value) }
+  }
+  Action { text: (root.meetingMascot ? "✓  " : "○  ") + qsTr("Walking cat at meeting start"); onClicked: root.meetingMascotToggled() }
+  Action {
+    text: qsTr("Test now"); bordered: true
+    tooltipText: qsTr("Show the walking cat with its Meeting now sign")
+    onClicked: root.mascotPreviewRequested()
+  }
   Label { width: parent.width; wrapMode: Text.WordWrap; visible: text !== ""; text: root.message; color: Color.accent }
 }

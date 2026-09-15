@@ -55,6 +55,8 @@ Each account has an independent sync status and cache. Sync runs on shell startu
 - When a timed event starts, a desktop alert appears. Click it to join the meeting or open the event using the matching account. Alerts work while the popup is closed, respect Do Not Disturb, and skip hidden calendars, declined invitations, all-day events, and out-of-office blocks. Shared events alert once across monitors and shell restarts. Events that started less than a minute ago can still alert after a late sync or wake; older events do not.
 - Arrow keys select days; `[` / `]` change month; `t` returns to today; `r` refreshes; `s` opens settings; `m` joins the featured meeting. Tab moves between controls; Escape backs out or closes.
 - Right-click the bar clock to cycle its date format.
+- When the displayed meeting starts, the horizontal bar entry gently pulses in the theme's attention color for 3 minutes (or until the meeting ends or is marked done). Change **Settings → Display → Meeting start pulse** to set the duration in minutes; `0` disables it. The same setting is available as `startPulseMinutes` on the `smo.calendar` entry in `shell.json`. Reloading or waking resumes only the remaining time after the meeting's start.
+- A little cat carries a **MEETING NOW!** sign across the bottom of each screen with a calendar bar when the start pulse begins. Its stroll takes 12 seconds, lets clicks pass through, and never takes keyboard focus. Click **Test now** in the calendar header (beside Refresh), or toggle **Walking cat at meeting start** in the calendar settings (`meetingMascot` in `shell.json`). The test works even without a meeting or with automatic walks disabled. It makes one pass per start-pulse window; reloading the plugin during that window starts a fresh pass. `omarchy-shell smo.calendar previewMascot` previews it on one calendar screen.
 
 The sync expands recurring events through Google and normalizes them in your local IANA timezone. It fetches the past 31 days and next 93 days. Dates outside that range are labelled. Calendars with only free/busy access cannot supply event details and are omitted.
 
@@ -74,6 +76,8 @@ PYTHONPATH=sync python3 -m unittest discover -s tests -t .
 omarchy plugin validate .
 tests/preview.sh /tmp/calendar-preview.png
 tests/preview.sh /tmp/calendar-accounts.png settings
+tests/preview.sh /tmp/calendar-mascot.png mascot
+quickshell -p tests/MascotSmoke.qml # Shows the cat briefly and checks the desktop animation.
 ```
 
 The older upstream `sync/setup` and `omarchy-calendar-sync` files remain for reference, but this fork uses `calendarctl` and does not install that upstream timer or depend on `gws`.

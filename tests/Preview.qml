@@ -6,11 +6,12 @@ import qs.Commons
 
 Window {
   id: window
-  visible: true; width: 540; height: 950; color: Color.background
+  readonly property bool mascotPreview: Quickshell.env("PREVIEW_SCREEN") === "mascot"
+  visible: true; width: 540; height: mascotPreview ? 240 : 950; color: Color.background
   Rectangle { anchors.fill: parent; color: Color.background }
   CalendarView {
     id: calendar
-    visible: Quickshell.env("PREVIEW_SCREEN") !== "settings"
+    visible: !window.mascotPreview && Quickshell.env("PREVIEW_SCREEN") !== "settings"
     x: 20; y: 20; width: parent.width - 40
     now: new Date(2026, 8, 8, 13, 50)
     events: [
@@ -25,6 +26,11 @@ Window {
     visible: Quickshell.env("PREVIEW_SCREEN") === "settings"
     x: 20; y: 20; width: parent.width - 40
     document: ({accounts:[{id:"a",email:"alex@example.com",syncedAt:"2026-09-08T11:45:00Z"},{id:"b",email:"alex@studio.example",error:"Authorization expired. Reconnect this account."}],calendars:[{id:"a:c",accountId:"a",name:"Personal",color:"#a6da95"},{id:"b:c",accountId:"b",name:"Work",color:"#89b4fa"}]})
+  }
+  MeetingMascot {
+    visible: window.mascotPreview
+    walking: visible
+    anchors.centerIn: parent
   }
   Timer { interval: 1800; running: true; onTriggered: window.contentItem.grabToImage(function(result) { result.saveToFile(Quickshell.env("PREVIEW_OUTPUT")); Qt.quit() }) }
 }

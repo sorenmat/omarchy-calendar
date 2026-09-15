@@ -134,6 +134,11 @@ Panel {
             }
             Row {
               id: actions
+              Button {
+                text: qsTr("Test now"); tooltipText: qsTr("Show the walking cat with its Meeting now sign")
+                bordered: true; focusable: true
+                onClicked: { root.close(); if (root.hostWidget) root.hostWidget.previewMascot() }
+              }
               Button { text: backend.running ? "…" : "↻"; tooltipText: qsTr("Refresh calendars"); focusable: true; enabled: !backend.running; onClicked: root.run(["sync"]) }
               Button { text: root.settingsOpen ? "←" : "⚙"; tooltipText: root.settingsOpen ? qsTr("Back to calendar") : qsTr("Accounts and settings"); focusable: true; onClicked: root.settingsOpen = !root.settingsOpen }
             }
@@ -158,6 +163,11 @@ Panel {
             document: root.eventDoc; hiddenCalendars: root.hiddenCalendars
             busy: backend.running; message: root.statusMessage
             weekStartsMonday: root.weekStart === 1; hideDeclined: root.setting("hideDeclined", false)
+            startPulseMinutes: root.setting("startPulseMinutes", 3)
+            meetingMascot: root.setting("meetingMascot", true)
+            onMeetingMascotToggled: root.persist({meetingMascot: !root.setting("meetingMascot", true)})
+            onMascotPreviewRequested: { root.close(); if (root.hostWidget) root.hostWidget.previewMascot() }
+            onStartPulseMinutesEdited: function(minutes) { root.persist({startPulseMinutes: minutes}) }
             onConnectRequested: function(path, account) { root.connect(path, account) }
             onRemoveRequested: function(account) { root.run(["remove", account]) }
             onCalendarToggled: function(id) { root.persist({hiddenCalendars: Model.toggleHiddenCalendar(root.hiddenCalendars, id)}) }

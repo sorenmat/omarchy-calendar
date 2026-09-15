@@ -20,9 +20,26 @@
     "defaults": {
       "format": "dddd HH:mm",
       "formatAlt": "d MMMM 'W'ww yyyy",
-      "verticalFormat": "HH\n-\nmm"
+      "verticalFormat": "HH\n-\nmm",
+      "startPulseMinutes": 3,
+      "meetingMascot": true
     },
     "schema": [
+      {
+        "key": "meetingMascot",
+        "type": "boolean",
+        "label": "Walking cat at meeting start",
+        "defaultValue": true
+      },
+      {
+        "key": "startPulseMinutes",
+        "type": "integer",
+        "label": "Meeting start pulse (minutes, 0 = off)",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 3
+      },
       {
         "key": "format",
         "type": "string",
