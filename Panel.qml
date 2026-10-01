@@ -39,6 +39,13 @@ Panel {
     var done = setting("doneEvents", [])
     persist({doneEvents: done.indexOf(key) === -1 ? done.concat([key]) : done.filter(function(k) { return k !== key })})
   }
+  function markDone(event) {
+    if (!event) return
+    var key = Model.occurrenceKey(event)
+    var done = setting("doneEvents", [])
+    if (done.indexOf(key) === -1) persist({doneEvents: done.concat([key])})
+  }
+  function joinMeeting(event) { root.openLink(Model.meetingUrlFor(event)); root.markDone(event) }
   function refresh() { root.now = new Date(); eventsFile.reload() }
   function open() { refresh(); calendar.today(); root.controller.show() }
   function close() { root.controller.hide() }
@@ -114,7 +121,7 @@ Panel {
         else if (event.text === "t") calendar.today()
         else if (event.text === "r") root.run(["sync"])
         else if (event.text === "s") root.settingsOpen = true
-        else if (event.text === "m") root.openLink(Model.meetingUrlFor(calendar.featured))
+        else if (event.text === "m") root.joinMeeting(calendar.featured)
         else return
         event.accepted = true
       }
@@ -155,6 +162,7 @@ Panel {
             busy: backend.running; message: root.statusMessage
             onRespondRequested: function(event, response) { root.run(["respond", event.accountId, event.calendarId, event.id, response]) }
             onDoneRequested: function(event) { root.toggleDone(event) }
+            onJoinRequested: function(event) { root.joinMeeting(event) }
             onOpenUrl: function(url) { root.openLink(url) }
             onConnectRequested: root.settingsOpen = true
           }

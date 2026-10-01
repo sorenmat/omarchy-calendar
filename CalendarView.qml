@@ -26,6 +26,7 @@ Column {
   signal connectRequested()
   signal respondRequested(var event, string response)
   signal doneRequested(var event)
+  signal joinRequested(var event)
   spacing: Style.space(12)
 
   function today() {
@@ -206,7 +207,7 @@ Column {
           Layout.fillWidth: true
           visible: !!Model.meetingUrlFor(root.featured)
           text: qsTr("Join meeting"); iconText: "󰕧"; selected: true
-          onClicked: root.openUrl(Model.meetingUrlFor(root.featured))
+          onClicked: root.joinRequested(root.featured)
         }
         Action {
           Layout.fillWidth: true
@@ -280,7 +281,7 @@ Column {
             }
             Action {
               visible: !Model.isDeclined(event.modelData) && Model.isJoinableNow(event.modelData, root.now.getTime(), Model.keyForDate(root.now))
-              text: qsTr("Join"); onClicked: root.openUrl(Model.meetingUrlFor(event.modelData))
+              text: qsTr("Join"); onClicked: root.joinRequested(event.modelData)
             }
           }
         }
